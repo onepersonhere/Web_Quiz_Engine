@@ -4,6 +4,9 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import engine.completed.CompletedPageService;
+import engine.completed.CompletedQuiz;
+import engine.completed.CompletedService;
 import engine.repos.QuizService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -11,6 +14,8 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -18,9 +23,16 @@ import java.util.List;
 @Controller
 public class QuizController {
     List<Quiz> quizzes = new ArrayList<>();
+    List<CompletedQuiz> completedQuizzes = new ArrayList<>();
     static String author = "";
     @Autowired
     QuizService service;
+    @Autowired
+    PageService pageService;
+    @Autowired
+    CompletedService completedService;
+    @Autowired
+    CompletedPageService completedPageService;
 
     @GetMapping(value = "/api/quizzes/{id}", produces = "application/json")
     @ResponseBody
@@ -70,13 +82,69 @@ public class QuizController {
 
     @GetMapping(value = "/api/quizzes", produces = "application/json")
     @ResponseBody
-    public String getAll(){
+    public String getAll(@RequestParam int page){
         Import();
+        Gson gson = new Gson();
+        JsonObject jObj = new JsonObject();
+
         JsonArray jArr = new JsonArray();
-        for(int i = 0; i < quizzes.size();i++){
-            jArr.add(getQuizJson(quizzes.get(i)));
-        }
-        return new Gson().toJson(jArr);
+        List<Quiz> list = pageService.getAllQuiz(page);
+        String jsonStr = gson.toJson(list);
+        jsonStr = jsonStr.replaceAll("(,\"answer\":\\[(\\d,?)*\\],)(\"author\":\"(\\w@?\\.?)*\")", "");
+        jArr = new JsonParser().parse(jsonStr).getAsJsonArray();
+
+        boolean bool = false;
+        jObj.addProperty("totalPages", (int)Math.ceil(quizzes.size()/10.0));
+        jObj.addProperty("totalElements", quizzes.size());
+
+        if(page == (int)Math.ceil(quizzes.size()/10.0) - 1) bool = true;
+        jObj.addProperty("last", bool);
+        bool = false;
+        if(page == 0) bool = true;
+        jObj.addProperty("first", bool);
+
+        jObj.add("sort", new JsonObject());
+        jObj.addProperty("number", page);
+        jObj.addProperty("numberOfElements", list.size());
+        jObj.addProperty("size", 10);
+        bool = false;
+        if(list.isEmpty()) bool = true;
+        jObj.addProperty("empty", bool);
+        jObj.add("pageable", new JsonObject());
+
+        jObj.add("content", jArr);
+
+        return new Gson().toJson(jObj);
+    }
+
+    @GetMapping(value = "/api/quizzes/completed", produces = "application/json")
+    @ResponseBody
+    public String getCompleted(@RequestParam int page){
+        Import();
+        Gson gson = new Gson();
+        JsonObject jObj = new JsonObject();
+        JsonArray jArr = new JsonArray();
+        List<CompletedQuiz> list = completedPageService.getAllCompletedQuiz(page);
+        String jsonStr = gson.toJson(list);
+        jArr = new JsonParser().parse(jsonStr).getAsJsonArray();
+
+        boolean bool = false;
+        jObj.addProperty("totalPages", (int)Math.ceil(completedQuizzes.size()/10.0));
+        jObj.addProperty("totalElements", completedQuizzes.size());
+
+        if(page == (int)Math.ceil(completedQuizzes.size()/10.0) - 1) bool = true;
+        jObj.addProperty("last", bool);
+        bool = false;
+        if(page == 0) bool = true;
+        jObj.addProperty("first", bool);
+
+        bool = false;
+        if(list.isEmpty()) bool = true;
+        jObj.addProperty("empty", bool);
+
+        jObj.add("content", jArr);
+
+        return new Gson().toJson(jObj);
     }
 
     @DeleteMapping(value = "/api/quizzes/{id}")
@@ -121,6 +189,12 @@ public class QuizController {
         if (list.equals(ans)) {
             success = true;
             feedback = "Congratulations, you're right!";
+            String formattedDateTime =
+                    LocalDateTime.now()
+                            .format(
+                                    DateTimeFormatter
+                                            .ofPattern("dd-MM-yyyy'T'HH:mm:ss.SSSSSS"));
+            completedService.saveNewQuiz(new CompletedQuiz(quiz.getId(), formattedDateTime));
         }
         JsonObject jObj2 = new JsonObject();
         jObj2.addProperty("success", success);
@@ -155,6 +229,7 @@ public class QuizController {
 
     private void Import(){
         quizzes = service.getAllQuiz();
+        completedQuizzes = completedService.getAllQuiz();
     }
 
     private List<Integer> getAnswer(JsonObject jObj){
