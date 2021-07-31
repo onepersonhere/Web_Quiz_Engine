@@ -105,11 +105,10 @@ public class QuizController {
         List<Integer> ans = quiz.getAnswer();
         Collections.sort(list);
         Collections.sort(ans);
-        if (ans.equals(list)) {
+        if (list.equals(ans)) {
             success = true;
             feedback = "Congratulations, you're right!";
         }
-
         JsonObject jObj2 = new JsonObject();
         jObj2.addProperty("success", success);
         jObj2.addProperty("feedback", feedback);
