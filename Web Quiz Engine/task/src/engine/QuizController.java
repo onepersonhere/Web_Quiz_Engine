@@ -12,13 +12,13 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 @Controller
 public class QuizController {
     List<Quiz> quizzes = new ArrayList<>();
+    static String author = "";
     @Autowired
     QuizService service;
 
@@ -57,6 +57,7 @@ public class QuizController {
         quiz.setTitle(jObj.get("title").getAsString());
         quiz.setText(jObj.get("text").getAsString());
         quiz.setOptions(gson.fromJson(jObj.get("options").getAsJsonArray(), List.class));
+        quiz.setAuthor(author);
         try {
             List<Integer> list = getAnswer(jObj);
             quiz.setAnswer(list);
@@ -67,7 +68,7 @@ public class QuizController {
         return getQuiz(id);
     }
 
-    @GetMapping(value = "api/quizzes", produces = "application/json")
+    @GetMapping(value = "/api/quizzes", produces = "application/json")
     @ResponseBody
     public String getAll(){
         Import();
@@ -78,6 +79,18 @@ public class QuizController {
         return new Gson().toJson(jArr);
     }
 
+    @DeleteMapping(value = "/api/quizzes/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteQuiz(@PathVariable int id){
+        Import();
+
+        Quiz quiz = getQuizByID(id);
+        if(quiz.getAuthor().equals(author)){
+            service.deleteQuiz(quiz);
+        }else{
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        }
+    }
 
     private JsonObject getQuizJson(Quiz quiz){
         JsonObject jObj = new JsonObject();
@@ -152,5 +165,9 @@ public class QuizController {
             list.add(i);
         }
         return list;
+    }
+
+    public static void setAuthor(String author){
+        QuizController.author = author;
     }
 }

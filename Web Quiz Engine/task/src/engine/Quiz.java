@@ -31,4 +31,7 @@ public class Quiz {
     @ElementCollection
     @Column
     List<Integer> answer = new ArrayList<>();
+
+    @Column
+    String author;
 }

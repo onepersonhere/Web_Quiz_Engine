@@ -793,6 +793,505 @@ files:
         }
     }
   learner_created: false
+- name: src/engine/auth/SecurityConfig.java
+  visible: true
+  text: |
+    package engine.auth;
+
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.context.annotation.Bean;
+    import org.springframework.context.annotation.Configuration;
+    import org.springframework.http.HttpMethod;
+    import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
+    import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+    import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+    import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+    import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+    import org.springframework.security.crypto.password.PasswordEncoder;
+
+    @Configuration
+    @EnableWebSecurity
+    public class SecurityConfig extends WebSecurityConfigurerAdapter {
+        private static final String USER = "USER";
+        @Autowired
+        CustomAuthProvider customAuthProvider;
+        @Override
+        protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+            auth.authenticationProvider(customAuthProvider);
+        }
+
+        @Override
+        protected void configure(HttpSecurity http) throws Exception {
+            http.csrf().disable()
+                    .headers().frameOptions().disable()
+                    .and()
+                    .httpBasic()
+                    .and()
+                    .authorizeRequests()
+                    .antMatchers(HttpMethod.POST, "/api/register/", "/actuator/shutdown/")
+                    .permitAll()
+                    .antMatchers("/api/quizzes/**")
+                    .authenticated()
+                    .and()
+                    .formLogin()
+                    .permitAll();
+
+        }
+
+        @Bean
+        public PasswordEncoder getEncoder() {
+            return new BCryptPasswordEncoder();
+        }
+    }
+  learner_created: true
+- name: src/engine/auth/CustomAuthProvider.java
+  visible: true
+  text: |
+    package engine.auth;
+
+    import engine.QuizController;
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.security.authentication.AuthenticationProvider;
+    import org.springframework.security.authentication.BadCredentialsException;
+    import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+    import org.springframework.security.core.Authentication;
+    import org.springframework.security.core.AuthenticationException;
+    import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+    import org.springframework.stereotype.Component;
+
+    import java.util.ArrayList;
+    import java.util.Collections;
+    import java.util.List;
+
+    @Component
+    public class CustomAuthProvider implements AuthenticationProvider {
+        @Autowired
+        UserService service;
+
+        List<User> list = new ArrayList<>();
+        @Override
+        public Authentication authenticate(Authentication auth)
+                throws AuthenticationException {
+            Import();
+            String username = auth.getName();
+            String password = auth.getCredentials()
+                    .toString();
+            BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+            for(int i = 0; i < list.size(); i++) {
+                if (list.get(i).getEmail().equals(username)
+                        && passwordEncoder.matches(password, list.get(i).getPassword())) {
+                    QuizController.setAuthor(username);
+                    return new UsernamePasswordAuthenticationToken
+                            (username, password, Collections.emptyList());
+                }
+            }
+            throw new BadCredentialsException("External system authentication failed");
+        }
+
+        @Override
+        public boolean supports(Class<?> auth) {
+            return auth.equals(UsernamePasswordAuthenticationToken.class);
+        }
+
+        public void Import(){
+            list = service.getAllUser();
+        }
+    }
+  learner_created: true
+- name: src/engine/Quiz.java
+  visible: true
+  text: |
+    package engine;
+
+    import lombok.*;
+
+    import javax.persistence.Column;
+    import javax.persistence.ElementCollection;
+    import javax.persistence.Entity;
+    import javax.persistence.Id;
+    import java.util.ArrayList;
+    import java.util.List;
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    @Entity
+    public class Quiz {
+        @Id
+        @Column
+        int id;
+
+        @Column
+        String title;
+
+        @Column
+        String text;
+
+        @ElementCollection
+        @Column
+        List<String> options;
+
+        @ElementCollection
+        @Column
+        List<Integer> answer = new ArrayList<>();
+
+        @Column
+        String author;
+    }
+  learner_created: true
+- name: src/engine/repos/Repo.java
+  visible: true
+  text: |
+    package engine.repos;
+
+    import engine.Quiz;
+    import org.springframework.data.repository.CrudRepository;
+
+    public interface Repo extends CrudRepository<Quiz, Integer> {
+    }
+  learner_created: true
+- name: src/engine/auth/UserRepo.java
+  visible: true
+  text: |
+    package engine.auth;
+
+    import org.springframework.data.repository.CrudRepository;
+
+    public interface UserRepo extends CrudRepository<User, String> {
+    }
+  learner_created: true
+- name: src/engine/QuizController.java
+  visible: true
+  text: |
+    package engine;
+
+    import com.google.gson.Gson;
+    import com.google.gson.JsonArray;
+    import com.google.gson.JsonObject;
+    import com.google.gson.JsonParser;
+    import engine.repos.QuizService;
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.http.HttpStatus;
+    import org.springframework.stereotype.Controller;
+    import org.springframework.web.bind.annotation.*;
+    import org.springframework.web.server.ResponseStatusException;
+
+    import java.util.ArrayList;
+    import java.util.Collections;
+    import java.util.List;
+
+    @Controller
+    public class QuizController {
+        List<Quiz> quizzes = new ArrayList<>();
+        static String author = "";
+        @Autowired
+        QuizService service;
+
+        @GetMapping(value = "/api/quizzes/{id}", produces = "application/json")
+        @ResponseBody
+        public String getQuiz(@PathVariable int id){
+            //parse json
+            Import();
+            return new Gson().toJson(getQuizJson(getQuizByID(id)));
+        }
+
+        @PostMapping(value = "/api/quizzes/{id}/solve", produces = "application/json")
+        @ResponseBody
+        public String solveQuiz(@RequestBody String answer, @PathVariable int id){
+            Import();
+            return solve(getQuizByID(id), answer);
+        }
+
+        @PostMapping(value = "/api/quizzes", produces = "application/json")
+        @ResponseBody
+        public String newQuiz(@RequestBody String json){
+            Import();
+            Gson gson = new Gson();
+            JsonObject jObj = new JsonObject();
+            try {
+                jObj = new JsonParser().parse(json).getAsJsonObject();
+            }catch(Exception e){
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
+            }
+            //test out the json
+            requestHandler(jObj);
+
+            Quiz quiz = new Quiz();
+            int id = idGenerator();
+            quiz.setId(id);
+            quiz.setTitle(jObj.get("title").getAsString());
+            quiz.setText(jObj.get("text").getAsString());
+            quiz.setOptions(gson.fromJson(jObj.get("options").getAsJsonArray(), List.class));
+            quiz.setAuthor(author);
+            try {
+                List<Integer> list = getAnswer(jObj);
+                quiz.setAnswer(list);
+            }catch(Exception ignored) {}
+            quizzes.add(quiz);
+            service.saveNewQuiz(quiz);
+
+            return getQuiz(id);
+        }
+
+        @GetMapping(value = "/api/quizzes", produces = "application/json")
+        @ResponseBody
+        public String getAll(){
+            Import();
+            JsonArray jArr = new JsonArray();
+            for(int i = 0; i < quizzes.size();i++){
+                jArr.add(getQuizJson(quizzes.get(i)));
+            }
+            return new Gson().toJson(jArr);
+        }
+
+        @DeleteMapping(value = "/api/quizzes/{id}")
+        @ResponseStatus(HttpStatus.NO_CONTENT)
+        public void deleteQuiz(@PathVariable int id){
+            Import();
+
+            Quiz quiz = getQuizByID(id);
+            if(quiz.getAuthor().equals(author)){
+                service.deleteQuiz(quiz);
+            }else{
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+            }
+        }
+
+        private JsonObject getQuizJson(Quiz quiz){
+            JsonObject jObj = new JsonObject();
+            jObj.addProperty("id", quiz.getId());
+            jObj.addProperty("title", quiz.getTitle());
+            jObj.addProperty("text", quiz.getText());
+            jObj.add("options", getJsonArr(quiz.getOptions()));
+            return jObj;
+        }
+
+        private JsonArray getJsonArr(List<String> arr){
+            JsonArray jArr = new JsonArray();
+            for(int i = 0; i < arr.size(); i++){
+                jArr.add(arr.get(i));
+            }
+            return jArr;
+        }
+
+        private String solve(Quiz quiz, String input){
+            boolean success = false;
+            String feedback = "Wrong answer! Please, try again.";
+            JsonObject jObj = new JsonParser().parse(input).getAsJsonObject();
+
+            List<Integer> list = getAnswer(jObj);
+            List<Integer> ans = quiz.getAnswer();
+            Collections.sort(list);
+            Collections.sort(ans);
+            if (list.equals(ans)) {
+                success = true;
+                feedback = "Congratulations, you're right!";
+            }
+            JsonObject jObj2 = new JsonObject();
+            jObj2.addProperty("success", success);
+            jObj2.addProperty("feedback", feedback);
+            return new Gson().toJson(jObj2);
+        }
+
+        private int idGenerator(){
+            return (int)(Math.random() * 999 + 1);
+        }
+
+        private Quiz getQuizByID(int id){
+            for(int i = 0; i < quizzes.size(); i++){
+                Quiz q = quizzes.get(i);
+                if(q.getId() == id){
+                    return q;
+                }
+            }
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+
+        private void requestHandler(JsonObject jObj) {
+            Gson gson = new Gson();
+            try{
+                if(jObj.get("title").getAsString().isBlank()) throw new Exception();
+                if(jObj.get("text").getAsString().isBlank()) throw new Exception();
+                if(gson.fromJson(jObj.get("options").getAsJsonArray(), List.class).size() < 2) throw new Exception();
+            }catch(Exception e){
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
+            }
+        }
+
+        private void Import(){
+            quizzes = service.getAllQuiz();
+        }
+
+        private List<Integer> getAnswer(JsonObject jObj){
+            Gson gson = new Gson();
+            int[] arr= gson.fromJson(jObj.get("answer").getAsJsonArray(), int[].class);
+            List<Integer> list = new ArrayList<>();
+            for(int i : arr){
+                list.add(i);
+            }
+            return list;
+        }
+
+        public static void setAuthor(String author){
+            QuizController.author = author;
+        }
+    }
+  learner_created: true
+- name: src/engine/auth/UserController.java
+  visible: true
+  text: |
+    package engine.auth;
+
+    import com.google.gson.JsonObject;
+    import com.google.gson.JsonParser;
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.http.HttpStatus;
+    import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+    import org.springframework.stereotype.Controller;
+    import org.springframework.web.bind.annotation.PostMapping;
+    import org.springframework.web.bind.annotation.RequestBody;
+    import org.springframework.web.bind.annotation.ResponseStatus;
+    import org.springframework.web.server.ResponseStatusException;
+
+    import java.util.ArrayList;
+    import java.util.List;
+
+    @Controller
+    public class UserController {
+        List<User> userList = new ArrayList<>();
+        @Autowired
+        UserService service;
+
+        @PostMapping(value = "/api/register")
+        @ResponseStatus(HttpStatus.OK)
+        public void register(@RequestBody String json){
+            Import();
+            JsonObject jObj = new JsonParser().parse(json).getAsJsonObject();
+            for(User user : userList){
+                if(user.getEmail().equals(jObj.get("email").getAsString())){
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
+                }
+            }
+            newUser(json);
+        }
+
+        private void newUser(String json){
+            User user = new User();
+            JsonObject jObj = new JsonParser().parse(json).getAsJsonObject();
+            if(!jObj.get("email").getAsString().contains("@") ||
+                    !jObj.get("email").getAsString().contains("."))
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
+            if(jObj.get("password").getAsString().length() < 5 ||
+                    jObj.get("password").getAsString().isBlank())
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
+
+            String password = jObj.get("password").getAsString();
+            BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
+            user.setEmail(jObj.get("email").getAsString());
+            user.setPassword(passwordEncoder.encode(password));
+            userList.add(user);
+            service.saveNewUser(user);
+        }
+
+        public void Import(){
+            userList = service.getAllUser();
+        }
+    }
+  learner_created: true
+- name: src/engine/repos/QuizService.java
+  visible: true
+  text: |
+    package engine.repos;
+
+    import engine.Quiz;
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.stereotype.Service;
+
+    import java.util.ArrayList;
+    import java.util.List;
+
+    @Service
+    public class QuizService {
+        @Autowired
+        Repo repo;
+
+        public List<Quiz> getAllQuiz(){
+            List<Quiz> quizList = new ArrayList<>();
+            repo.findAll().forEach(quiz -> quizList.add(quiz));
+            return quizList;
+        }
+
+        public void saveNewQuiz(Quiz quiz){
+            repo.save(quiz);
+        }
+
+        public void deleteQuiz(Quiz quiz){
+            repo.delete(quiz);
+        }
+    }
+  learner_created: true
+- name: src/engine/auth/User.java
+  visible: true
+  text: |
+    package engine.auth;
+
+    import lombok.AllArgsConstructor;
+    import lombok.Data;
+    import lombok.NoArgsConstructor;
+
+    import javax.persistence.Column;
+    import javax.persistence.Entity;
+    import javax.persistence.Id;
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    @Entity
+    public class User {
+        @Id
+        @Column
+        String email;
+        @Column
+        String password;
+    }
+  learner_created: true
+- name: src/engine/auth/UserService.java
+  visible: true
+  text: |
+    package engine.auth;
+
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.stereotype.Service;
+
+    import java.util.ArrayList;
+    import java.util.List;
+
+    @Service
+    public class UserService {
+        @Autowired
+        UserRepo repo;
+
+        public List<User> getAllUser(){
+            List<User> userList = new ArrayList<>();
+            repo.findAll().forEach(recipe -> userList.add(recipe));
+            return userList;
+        }
+
+        public void saveNewUser(User user){
+            repo.save(user);
+        }
+
+        public void deleteUser(User user){
+            repo.delete(user);
+        }
+
+        public void replaceUser(User user){
+            deleteUser(user);
+            saveNewUser(user);
+        }
+    }
+  learner_created: true
 feedback_link: https://hyperskill.org/projects/91/stages/509/implement#comment
 status: Unchecked
 record: -1

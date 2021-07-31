@@ -1,30 +1,6 @@
 type: edu
 custom_name: stage5
 files:
-- name: build.gradle
-  visible: true
-  text: |
-    plugins {
-        id 'org.springframework.boot' version '2.2.2.RELEASE'
-        id 'java'
-    }
-
-    apply plugin: 'io.spring.dependency-management'
-
-    sourceCompatibility = 11
-
-    repositories {
-        mavenCentral()
-    }
-
-    sourceSets.main.resources.srcDirs = ["src/resources"]
-
-    dependencies {
-        implementation 'org.springframework.boot:spring-boot-starter'
-        implementation 'org.springframework.boot:spring-boot-starter-actuator'
-        implementation 'org.springframework.boot:spring-boot-starter-web'
-    }
-  learner_created: false
 - name: src/engine/WebQuizEngine.java
   visible: true
   text: |
@@ -708,6 +684,48 @@ files:
     public interface Repo extends CrudRepository<Quiz, Integer> {
     }
   learner_created: true
+- name: src/engine/auth/User.java
+  visible: true
+  learner_created: true
+- name: src/engine/auth/UserController.java
+  visible: true
+  learner_created: true
+- name: src/engine/auth/UserService.java
+  visible: true
+  learner_created: true
+- name: src/engine/auth/UserRepo.java
+  visible: true
+  learner_created: true
+- name: src/engine/auth/SecurityConfig.java
+  visible: true
+  learner_created: true
+- name: src/engine/auth/CustomAuthProvider.java
+  visible: true
+  learner_created: true
+- name: build.gradle
+  visible: true
+  text: |
+    plugins {
+        id 'org.springframework.boot' version '2.2.2.RELEASE'
+        id 'java'
+    }
+
+    apply plugin: 'io.spring.dependency-management'
+
+    sourceCompatibility = 11
+
+    repositories {
+        mavenCentral()
+    }
+
+    sourceSets.main.resources.srcDirs = ["src/resources"]
+
+    dependencies {
+        implementation 'org.springframework.boot:spring-boot-starter'
+        implementation 'org.springframework.boot:spring-boot-starter-actuator'
+        implementation 'org.springframework.boot:spring-boot-starter-web'
+    }
+  learner_created: false
 - name: src/engine/QuizController.java
   visible: true
   text: |
@@ -900,6 +918,12 @@ files:
         }
     }
   learner_created: true
+- name: src/quizdb/quizdb.mv.db
+  visible: true
+  learner_created: true
 feedback_link: https://hyperskill.org/projects/91/stages/508/implement#comment
-status: Unchecked
-record: -1
+status: Solved
+feedback:
+  message: Congratulations!
+  time: Sat, 31 Jul 2021 11:42:34 UTC
+record: 5
