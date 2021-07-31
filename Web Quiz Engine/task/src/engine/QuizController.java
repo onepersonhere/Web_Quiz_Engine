@@ -4,6 +4,8 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import engine.repos.QuizService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
@@ -17,22 +19,28 @@ import java.util.List;
 @Controller
 public class QuizController {
     List<Quiz> quizzes = new ArrayList<>();
+    @Autowired
+    QuizService service;
+
     @GetMapping(value = "/api/quizzes/{id}", produces = "application/json")
     @ResponseBody
     public String getQuiz(@PathVariable int id){
         //parse json
+        Import();
         return new Gson().toJson(getQuizJson(getQuizByID(id)));
     }
 
     @PostMapping(value = "/api/quizzes/{id}/solve", produces = "application/json")
     @ResponseBody
     public String solveQuiz(@RequestBody String answer, @PathVariable int id){
+        Import();
         return solve(getQuizByID(id), answer);
     }
 
     @PostMapping(value = "/api/quizzes", produces = "application/json")
     @ResponseBody
     public String newQuiz(@RequestBody String json){
+        Import();
         Gson gson = new Gson();
         JsonObject jObj = new JsonObject();
         try {
@@ -50,10 +58,11 @@ public class QuizController {
         quiz.setText(jObj.get("text").getAsString());
         quiz.setOptions(gson.fromJson(jObj.get("options").getAsJsonArray(), List.class));
         try {
-            List<Integer> list = gson.fromJson(jObj.get("answer").getAsJsonArray(), List.class);
+            List<Integer> list = getAnswer(jObj);
             quiz.setAnswer(list);
         }catch(Exception ignored) {}
         quizzes.add(quiz);
+        service.saveNewQuiz(quiz);
 
         return getQuiz(id);
     }
@@ -61,6 +70,7 @@ public class QuizController {
     @GetMapping(value = "api/quizzes", produces = "application/json")
     @ResponseBody
     public String getAll(){
+        Import();
         JsonArray jArr = new JsonArray();
         for(int i = 0; i < quizzes.size();i++){
             jArr.add(getQuizJson(quizzes.get(i)));
@@ -90,8 +100,8 @@ public class QuizController {
         boolean success = false;
         String feedback = "Wrong answer! Please, try again.";
         JsonObject jObj = new JsonParser().parse(input).getAsJsonObject();
-        Gson gson = new Gson();
-        List<Integer> list = gson.fromJson(jObj.get("answer").getAsJsonArray(), List.class);
+
+        List<Integer> list = getAnswer(jObj);
         List<Integer> ans = quiz.getAnswer();
         Collections.sort(list);
         Collections.sort(ans);
@@ -129,5 +139,19 @@ public class QuizController {
         }catch(Exception e){
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
         }
+    }
+
+    private void Import(){
+        quizzes = service.getAllQuiz();
+    }
+
+    private List<Integer> getAnswer(JsonObject jObj){
+        Gson gson = new Gson();
+        int[] arr= gson.fromJson(jObj.get("answer").getAsJsonArray(), int[].class);
+        List<Integer> list = new ArrayList<>();
+        for(int i : arr){
+            list.add(i);
+        }
+        return list;
     }
 }
