@@ -121,11 +121,14 @@ public class QuizController {
     @ResponseBody
     public String getCompleted(@RequestParam int page){
         Import();
+        //get only author completed
         Gson gson = new Gson();
         JsonObject jObj = new JsonObject();
         JsonArray jArr = new JsonArray();
-        List<CompletedQuiz> list = completedPageService.getAllCompletedQuiz(page);
+        List<CompletedQuiz> list = completedPageService.getAllCompletedQuiz(page, author);
+        
         String jsonStr = gson.toJson(list);
+        jsonStr = jsonStr.replaceAll("(,\"author\":\"(\\w@?\\.?)*\")","");
         jArr = new JsonParser().parse(jsonStr).getAsJsonArray();
 
         boolean bool = false;
@@ -194,7 +197,7 @@ public class QuizController {
                             .format(
                                     DateTimeFormatter
                                             .ofPattern("dd-MM-yyyy'T'HH:mm:ss.SSSSSS"));
-            completedService.saveNewQuiz(new CompletedQuiz(quiz.getId(), formattedDateTime));
+            completedService.saveNewQuiz(new CompletedQuiz(quiz.getId(), formattedDateTime, author));
         }
         JsonObject jObj2 = new JsonObject();
         jObj2.addProperty("success", success);

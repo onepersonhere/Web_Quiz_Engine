@@ -19,4 +19,7 @@ public class CompletedQuiz {
     @Column
     @Id
     String completedAt;
+
+    @Column
+    String author;
 }
